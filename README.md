@@ -63,5 +63,16 @@ Configure the extension to use the port that is connected to your ESP32.
 Step 11: Using the extension
 Note that building a project does not flash the project. Also note that flashing the project does not build changes made since the last build. Also note that you can monitor the connection, which allows for receiving console logs from the ESP32. When making changes to the code, make sure that you build, flash, and monitor the project.
 
+# Things to Note
+If any files are added or deleted, you must run reconfigure project. You also must run reconfigure project if you modify SDKConfig.
+
+SDKConfig must be modified to support PSRAM and external flash, as done in the SDKConfig file on this REPO.
+
+PSRAM must be configured to use OCTAL SPI PSRAM
+
+Flash must be configured to use QUAD SPI PSRAM
+
+
+
 
 
