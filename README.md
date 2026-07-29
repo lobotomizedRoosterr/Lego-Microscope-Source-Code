@@ -5,7 +5,34 @@ This is incomplete, exclusively for a LEGO Computational Microscope outreach pro
 # Setting Up in VS-Code
 
 Step 1: Prerequisites
-The only prerequisite is VS-Code, per the documentation https://docs.espressif.com/projects/vscode-esp-idf-extension/en/latest/prerequisites.html.
+The prerequisites are described in the documentation https://docs.espressif.com/projects/vscode-esp-idf-extension/en/latest/prerequisites.html.
+Windows prerequisites:
+-git
+-Python 3.10, 3.11, 3.12, 3.13, or 3.14
+MacOS prerequisites:
+-libgcrypt: Runtime library for cryptographic functions (QEMU dependency).
+-glib: Runtime library for GLib (QEMU dependency).
+-pixman: Runtime library for pixman (QEMU dependency).
+-sdl2: Runtime library for SDL2 (QEMU dependency).
+-libslirp: Runtime library for SLIRP user-mode networking (QEMU dependency).
+-dfu-util
+-Python with pip capable of creating virtual environments and handling SSL requests
+
+Linux prerequisites:
+-git
+-wget
+-flex
+-bison
+-gperf
+-ccache
+-libffi-dev
+-libssl-dev
+-dfu-util
+-libusb-1.0-0
+-Python with pip capable of creating virtual environments and handling SSL requests
+
+ESP-IDF will install any prerequisites not installed on Windows, it will not do this for MacOS or Linux.
+Note that I have only done this on Windows. These prerequisites are from the espressif documentation.
 
 Step 2: Install ESP-IDF extension
 Install the ESP-IDF extension on VS-Code
