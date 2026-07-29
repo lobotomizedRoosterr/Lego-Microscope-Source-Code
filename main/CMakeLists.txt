@@ -14,5 +14,4 @@ idf_component_register(
         esp_timer
         esp_lcd
         esp_event
-        spiffs
 )
