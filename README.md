@@ -29,6 +29,7 @@ Install:
 ---
 
 ## macOS
+Instructions can also be found here https://docs.espressif.com/projects/esp-idf/en/v5.3.5/esp32s3/get-started/linux-macos-setup.html
 
 Install:
 
