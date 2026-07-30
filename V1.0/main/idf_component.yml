@@ -1,9 +1,0 @@
-## IDF Component Manager Manifest File
-dependencies:
-  ## Required IDF version
-  idf:
-    version: '>=4.1.0'
-  espressif/esp32-camera: '*'
-  espressif/esp_lcd_ili9341: '*'
-  atanisoft/esp_lcd_touch_xpt2046: '*'
-  espressif/esp-dsp: '*'
