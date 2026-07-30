@@ -20,9 +20,6 @@
 #include "images/bgc_img.h"
 #include "images/file_img.h"
 
-#define BUG_MODE 99
-#define DPC_GEN_MODE 98
-
 /*
 UI.c
 
@@ -32,19 +29,22 @@ Every button has a "mode" identifier. This dictates what to do when the button i
 
 */
 
+/* this is meant to hold data regarding a buttons situation.*/
+typedef struct {
+    bool was_selected_last_tick; /*If the button was selected last tick*/
+} button_state_t;
 
-// max buttons = 50
-button buttons[50];
+
+button_t buttons[50];
 int button_count = 0;
+
+button_state_t button_states[50];
 
 bool was_tap_down = false;
 
-volatile float cam_fps = 0.0f;
-volatile float comp_fps = 0.0f;
-
 bool debug_mode = false;
 
-void render_button(button b) {
+void render_button(button_t b) {
     uint16_t bg_color;
     uint16_t fg_color;
     if(b.is_selected) {
@@ -62,6 +62,59 @@ void render_button(button b) {
 
     draw_text(b.x+b.label_offset_x, b.y+b.label_offset_y, b.label, fg_color);
 }
+void dpc_mode_button_pressed(button_t* self, void* data) {
+    
+    buttons[DF_BUTTON_ID].is_selected=false;
+    buttons[BF_BUTTON_ID].is_selected=false;
+    buttons[QDF_BUTTON_ID].is_selected=false;
+    buttons[DPC_BUTTON_ID].is_selected=true;
+    switch(current_mode) {
+        case DPC_LR_MODE:
+            set_mode(DPC_RL_MODE);
+            self->raw_icon=dpc_rl_icon_raw;
+            break;
+        case DPC_RL_MODE:
+            set_mode(DPC_TB_MODE);
+            self->raw_icon=dpc_tb_icon_raw;
+            break;
+        case DPC_TB_MODE:
+            set_mode(DPC_BT_MODE);
+            self->raw_icon=dpc_bt_icon_raw;
+            break;
+        default:
+            set_mode(DPC_LR_MODE);
+            self->raw_icon=dpc_lr_icon_raw;
+            break;
+    }
+}
+void mode_button_pressed(button_t* self, void* data) {
+    switch(self->id) {
+        case DF_BUTTON_ID:
+            set_mode(DF_MODE);
+            buttons[DF_BUTTON_ID].is_selected=true;
+            buttons[BF_BUTTON_ID].is_selected=false;
+            buttons[QDF_BUTTON_ID].is_selected=false;
+            buttons[DPC_BUTTON_ID].is_selected=false;
+            break;
+        
+        case BF_BUTTON_ID:
+            set_mode(BF_MODE);
+            buttons[BF_BUTTON_ID].is_selected=true;
+            buttons[DF_BUTTON_ID].is_selected=false;
+            buttons[QDF_BUTTON_ID].is_selected=false;
+            buttons[DPC_BUTTON_ID].is_selected=false;
+            break;
+        
+        
+        case QDF_BUTTON_ID:
+            set_mode(QDF_MODE);
+            buttons[QDF_BUTTON_ID].is_selected=true;
+            buttons[DF_BUTTON_ID].is_selected=false;
+            buttons[BF_BUTTON_ID].is_selected=false;
+            buttons[DPC_BUTTON_ID].is_selected=false;
+            break;
+    };
+}
 
 esp_err_t init_ui(void) {
 
@@ -70,7 +123,7 @@ esp_err_t init_ui(void) {
     //are low quality. This should ensure that buttons can be pressed
     // see ui.h for 
 
-    add_button((button) {
+    add_button((button_t) {
         .bg_color_normal=color_from_rgb(0, 0, 0),
         .fg_color_normal=color_from_rgb(255, 255, 255),
         .icon_offset_x=0,
@@ -90,12 +143,14 @@ esp_err_t init_ui(void) {
         .raw_icon=darkfield_icon_raw,
         .icon_width=32,
         .icon_height=32,
-        .mode=DF_MODE,
         .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0)
+        .fg_color_selected=color_from_rgb(50, 0, 0),
+        .id=DF_BUTTON_ID,
+        .on_select=&mode_button_pressed,
+        .behavior=PUSH_BEHAVIOR
     });
     
-    add_button((button) {
+    add_button((button_t) {
         .bg_color_normal=color_from_rgb(0, 0, 0),
         .fg_color_normal=color_from_rgb(255, 255, 255),
         .icon_offset_x=0,
@@ -116,11 +171,13 @@ esp_err_t init_ui(void) {
         .icon_width=32,
         .icon_height=32,
         .bg_color_selected=color_from_rgb(150, 25, 25),
-        .mode=BF_MODE,
-        .fg_color_selected=color_from_rgb(50, 0, 0)
+        .fg_color_selected=color_from_rgb(50, 0, 0),
+        .id=BF_BUTTON_ID,
+        .on_select=&mode_button_pressed,
+        .behavior=PUSH_BEHAVIOR
     });
     
-    add_button((button) {
+    add_button((button_t) {
         .bg_color_normal=color_from_rgb(0, 0, 0),
         .fg_color_normal=color_from_rgb(255, 255, 255),
         .icon_offset_x=0,
@@ -140,12 +197,14 @@ esp_err_t init_ui(void) {
         .t_x1=320,
         .t_y0=96,
         .t_y1=144,
-        .mode=QDF_MODE,
         .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0)
+        .fg_color_selected=color_from_rgb(50, 0, 0),
+        .id=QDF_BUTTON_ID,
+        .on_select=&mode_button_pressed,
+        .behavior=PUSH_BEHAVIOR
     });
     
-    add_button((button) {
+    add_button((button_t) {
         .bg_color_normal=color_from_rgb(0, 0, 0),
         .fg_color_normal=color_from_rgb(255, 255, 255),
         .icon_offset_x=0,
@@ -165,94 +224,57 @@ esp_err_t init_ui(void) {
         .raw_icon=dpc_icon_raw,
         .icon_width=32,
         .icon_height=32,
-        .mode=DPC_GEN_MODE,
         .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0)
+        .fg_color_selected=color_from_rgb(50, 0, 0),
+        .id=DPC_BUTTON_ID,
+        .on_select=&dpc_mode_button_pressed,
+        .behavior=PUSH_BEHAVIOR
     });
     return ESP_OK;
+}
+
+bool is_button_tapped(button_t *button, touch_data td) {
+    bool ret = (button->t_x0 <= td.touch_x && button->t_x1 >= td.touch_x
+                && button->t_y0 <= td.touch_y && button->t_y1 >= td.touch_y
+                && td.pressed) ? true : false;
+    return ret;
 }
 void update_ui(void) {
     touch_data td = get_touch();
 
-    /*
-    TODO Change this
-    This needs to be reformatted and simplified.
-    Each button needs to contain a pointer to a function that passes values like *button self that runs when selected.
-    */
+    //this becomes true if even one button has been activated. It disallows buttons declared exclusive from activating.
+    bool has_button_activated = false;
+    for(int i = 0; i < button_count; i++) {
+        button_t *b = &buttons[i];
+        button_state_t *s = &button_states[i];
+
+        // if button is not tapped, do not update; continue
+        if(!is_button_tapped(b, td)) {
+            s->was_selected_last_tick=false;
+            continue;
+        };
+
+        // if button is push behavior, and was selected last tick, continue
+        if(b->behavior == PUSH_BEHAVIOR && s->was_selected_last_tick) continue;
+
+        //if button is exclusive and another button has been activated, do not update; continue
+        if(b->is_exclusive == true && has_button_activated) continue;
+
+        // if not continued, button is being interacted with properly
+        s->was_selected_last_tick=true;
+        has_button_activated=true;
+        b->on_select(b, NULL);
+    }
 
     //was_tap_down makes sure that the user has to release their finger before another button register can happen.
-    if(!was_tap_down && td.pressed) {
-        //Cycle through every button to update
-        for(int i = 0; i < button_count; i++) {
-            //Is touch point within bounds?
-            if(td.touch_x > buttons[i].t_x0 && td.touch_x < buttons[i].t_x1 && td.touch_y > buttons[i].t_y0 && td.touch_y<buttons[i].t_y1) {
-                //This is a remnant of a previous button, Debug. This is here to make sure that there are no attempts to set mode to "BUG_MODE"
-                if(buttons[i].mode == BUG_MODE) {
-                    continue;
-                }
-                //The DPC button works where it gets mode, if it is a mode other than DPC it sets it to DPC LR
-                //Then, if it was DPC, it has it cycle through the different modes.
-                if(buttons[i].mode == DPC_GEN_MODE) {
-                    buttons[i].is_selected=true;
-                    switch(current_mode) {
-                        case DPC_LR_MODE:
-                        set_mode(DPC_RL_MODE);
-                        buttons[i].raw_icon=dpc_rl_icon_raw;
-                        break;
-                        
-                        case DPC_RL_MODE:
-                        set_mode(DPC_TB_MODE);
-                        buttons[i].raw_icon=dpc_tb_icon_raw;
-                        break;
-                        
-                        case DPC_TB_MODE:
-                        set_mode(DPC_BT_MODE);
-                        buttons[i].raw_icon=dpc_bt_icon_raw;
-                        break;
-                        
-                        case DPC_BT_MODE:
-                        set_mode(DPC_LR_MODE);
-                        buttons[i].raw_icon=dpc_lr_icon_raw;
-                        break;
-
-                        default:
-                        set_mode(DPC_LR_MODE);
-                        buttons[i].raw_icon=dpc_rl_icon_raw;
-                        break;
-                    }
-                    //unselect every other button (except for i, the one that was tapped)
-                    for(int j = 0; j < button_count; j++) {
-                        if(j != i) {
-                            buttons[j].is_selected=false;
-                        }
-                    }
-                    continue;
-                }
-                    //unselect every other button (except for i, the one that was tapped)
-                for(int j = 0; j < button_count; j++) {
-                    if(j != i) {
-                        buttons[j].is_selected=false;
-                    }
-                }
-                //select button
-                buttons[i].is_selected=true;
-                //set mode
-                set_mode(buttons[i].mode);
-
-            } 
-        }
-        //make sure that the same button press isn't detected next tick.
-        was_tap_down=true;
-    }
-    // if no touch is detected, set was_tap_down accordingly, for the next tick
-    if(was_tap_down && !td.pressed) {
-        was_tap_down=false;
-    }
 }
 
-void add_button(button b) {
-    buttons[button_count] = b;
+void add_button(button_t b) {
+    buttons[b.id] = b;
     button_count++;
+    button_states[b.id] = (button_state_t) {
+        .was_selected_last_tick=false,
+    };
 }
 
 void render_ui(void) {
