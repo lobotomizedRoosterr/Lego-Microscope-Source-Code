@@ -18,9 +18,7 @@ DONE : orientation is now handled via LED_MATRIX_ORIENTATION below.
 // Dedicated SPI3 bus — independent from ILI9341 on SPI2
 #define MAX7219_SPI_HOST    SPI3_HOST
 
-/* =========================
-   ORIENTATION
-   =========================
+/*
    Set to how the physical matrix is mounted relative to "logical" 
    row 0 = top, col 0 = left (bit 0 = leftmost column of each row).
    Rotation is applied clockwise, in software, before every send.
@@ -34,9 +32,9 @@ DONE : orientation is now handled via LED_MATRIX_ORIENTATION below.
 #define LED_MATRIX_ORIENTATION LED_MATRIX_ROT_90
 #endif
 
-/* =========================
-   REGISTERS
-   ========================= */
+/* 
+ * These are registers for different variables.
+*/
 #define REG_NOOP        0x00
 #define REG_DIGIT0      0x01
 #define REG_SCANLIMIT   0x0B
@@ -49,17 +47,18 @@ spi_device_handle_t max_spi = NULL;
 
 static const char *TAG = "MAX7219";
 
-/* =========================
-   ORIENTATION HELPERS
-   =========================
+/*
    Each function transforms an 8x8 bitmap (matrix[row] = 8 bits,
    bit 0 = leftmost column) into the equivalent bitmap rotated
    clockwise by the named amount.
 */
+
+//rotates pattern none
 static void rotate_0(const uint8_t in[8], uint8_t out[8]) {
     memcpy(out, in, 8);
 }
 
+//rotates pattern 90 degrees clockwise
 static void rotate_90cw(const uint8_t in[8], uint8_t out[8]) {
     memset(out, 0, 8);
     for (int row = 0; row < 8; row++) {
@@ -71,6 +70,7 @@ static void rotate_90cw(const uint8_t in[8], uint8_t out[8]) {
     }
 }
 
+//rotates pattern 180 degrees
 static void rotate_180(const uint8_t in[8], uint8_t out[8]) {
     for (int row = 0; row < 8; row++) {
         uint8_t src = in[row];
@@ -84,6 +84,7 @@ static void rotate_180(const uint8_t in[8], uint8_t out[8]) {
     }
 }
 
+//rotates pattern 270 degrees clockwise (90 degrees counter-clockwise)
 static void rotate_270cw(const uint8_t in[8], uint8_t out[8]) {
     memset(out, 0, 8);
     for (int row = 0; row < 8; row++) {
@@ -95,6 +96,7 @@ static void rotate_270cw(const uint8_t in[8], uint8_t out[8]) {
     }
 }
 
+//macro for applying orientation
 static void apply_orientation(const uint8_t in[8], uint8_t out[8]) {
 #if LED_MATRIX_ORIENTATION == LED_MATRIX_ROT_90
     rotate_90cw(in, out);
@@ -129,6 +131,7 @@ esp_err_t init_led_matrix() {
     devcfg.spics_io_num   = -1;         // CS managed manually above
     devcfg.queue_size     = 1;
 
+    //add device to spi bus
     ret = spi_bus_add_device(MAX7219_SPI_HOST, &devcfg, &max_spi);
     ESP_LOGI(TAG, "MAX7219: spi_bus_add_device -> %s", esp_err_to_name(ret));
     if (ret != ESP_OK) return ret;
@@ -145,9 +148,7 @@ esp_err_t init_led_matrix() {
     return ESP_OK;
 }
 
-/* =========================
-   LOW LEVEL WRITE
-   ========================= */
+/* low level write*/
 esp_err_t write_reg(uint8_t reg, uint8_t data) {
     // Manual CS: pull low, transmit, pull high
     gpio_set_level(MAX_CS_PIN, 0);
@@ -162,6 +163,8 @@ esp_err_t write_reg(uint8_t reg, uint8_t data) {
     return ret;
 }
 
+//These functions configure the array by sending to specific registers.
+
 esp_err_t led_array_set_intensity(uint8_t intensity) {
     if (intensity > 15) intensity = 15;
     return write_reg(REG_INTENSITY, intensity);
@@ -173,16 +176,19 @@ esp_err_t led_array_clear(void) {
 }
 
 esp_err_t led_array_send_matrix(const uint8_t matrix[8]) {
+    //orient
     uint8_t oriented[8];
     apply_orientation(matrix, oriented);
 
     for (int row = 0; row < 8; row++) {
+        // spi transaction for each row
         spi_transaction_t t = {
             .length    = 16,
             .tx_buffer = (uint8_t[]){row + 1, oriented[row]}
         };
-
         gpio_set_level(MAX_CS_PIN, 0);
+
+        //send spi transaction
         ESP_ERROR_CHECK(spi_device_transmit(max_spi, &t));
         gpio_set_level(MAX_CS_PIN, 1);
     }
