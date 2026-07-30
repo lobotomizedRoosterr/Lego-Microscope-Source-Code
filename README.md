@@ -33,11 +33,10 @@ Instructions can also be found here https://docs.espressif.com/projects/esp-idf/
 
 Install:
 
-- libgcrypt
-- glib
-- pixman
-- SDL2
-- libslirp
+- git
+- Homebrew
+- Ninja
+- CMake
 - dfu-util
 - Python (with pip, virtual environment support, and SSL support)
 
@@ -48,6 +47,7 @@ Install:
 Install:
 
 - git
+- CMake
 - wget
 - flex
 - bison
@@ -126,88 +126,25 @@ idf.eimIdfJsonPath
 
 ---
 
-## Step 4 — Select the ESP-IDF Version
+## Step 4 — Open the git repo on VS-Code
 
-Open the Command Palette and run:
-
-```
-ESP-IDF: Select Current ESP-IDF Version
-```
-
-Select:
-
-```
-v5.3.5
-```
+1. Open the command palette on VS-Code
+2. Type the command "Git: Clone" and run it
+4. Enter the URL for the repo https://github.com/Zangle-Lab/Lego-Microscope-Source-Code
+5. Select "Clone from URL"
+6. Select a directory to clone the project to
 
 ---
 
-## Step 5 — Create a New Project
+## Step 5 - Configure ESP-IDF Version
 
-Open the Command Palette and run:
-
-```
-ESP-IDF: New Project
-```
-
-Choose:
-
-- ESP-IDF Version: **v5.3.5**
-- Template: **get-started**
-- Target: **ESP32-S3**
-- Board: **ESP32-S3 (via built-in USB-JTAG)**
-
-The serial port can be configured later.
+1. Go to command palette
+2. Type "ESP-IDF: Select Current ESP-IDF Version"
+3. Select v5.3.5
 
 ---
 
-## Step 6 — Copy the Project Files
-
-Open the newly created project.
-
-Inside the generated **main** directory:
-
-1. Delete:
-
-```
-main.c
-```
-
-2. Replace the contents of:
-
-```
-main/CMakeLists.txt
-```
-
-with the version from this repository.
-
-3. Replace the contents of:
-
-```
-main/idf_component.yml
-```
-
-with the version from this repository.
-
-If either file does not exist, create it.
-
-Next, copy the following folders and their contents from this repository into the project's **main** directory:
-
-```
-main/
-images/
-computation/
-components/
-```
-
-Finally:
-
-- Replace the project's `sdkconfig` with the version provided in this repository.
-- If `sdkconfig` does not exist, create it **in the project root**, **not** inside the `main` folder.
-
----
-
-## Step 7 — Reconfigure the Project
+## Step 6 — Reconfigure the Project
 
 Open the Command Palette and run:
 
@@ -219,7 +156,7 @@ Wait for the process to complete.
 
 ---
 
-## Step 8 — Build the Project
+## Step 7 — Build the Project
 
 Build the project using either method:
 
@@ -241,7 +178,7 @@ A successful build should produce the project binaries without errors.
 
 ---
 
-## Step 9 — Configure the Serial Port
+## Step 8 — Configure the Serial Port
 
 Connect the ESP32-S3 to your computer.
 
@@ -308,21 +245,17 @@ whenever:
 
 ---
 
-## PSRAM Configuration
+## Importance of sdkconfig
 
-The project requires:
+sdkconfig is vital for the project to run properly.
 
-- **Octal SPI PSRAM**
+In general, the following must be configured (note that this is done in the repo's sdkconfig file)
 
----
-
-## Flash Configuration
-
-Configure external flash to use:
-
-- **Quad SPI Flash**
-
-Use the `sdkconfig` provided in this repository as the reference configuration.
+- External PSRAM supported
+- Octal SPI mode PSRAM
+- External Flash Support
+- Quad SPI Flash
+- 16 mb Flash
 
 ---
 
