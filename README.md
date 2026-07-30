@@ -278,6 +278,8 @@ Building the project **does not** automatically flash it.
 
 Likewise, flashing **does not** rebuild any code changes.
 
+Use UART as a flash method.
+
 A typical development workflow is:
 
 1. Build
