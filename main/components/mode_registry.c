@@ -5,6 +5,9 @@
 #include "components/include/frame_pool.h"
 #include "computation/include/computation.h"
 #include "esp_camera.h"
+
+//these are holders for microscopy mode parameters (patterns, exposure, gain, etc)
+
 microscopy_mode df_mode;
 microscopy_mode bf_mode;
 microscopy_mode qdf_mode;
@@ -13,10 +16,18 @@ microscopy_mode dpc_mode_rl;
 microscopy_mode dpc_mode_tb;
 microscopy_mode dpc_mode_bt;
 
-int current_mode = BF_MODE;
+int current_mode = BF_MODE; // sets it to default mode
 
 // TODO: reuse TB for TB and BT, same for LR, RL (DPC)
 
+/*
+ * Note that for each pattern, it is simply 8 8-bit integers. Each bit represents whether an LED should be lit up.
+ * This results in 64 bits, one for each LED
+*/
+
+/*
+ * defines patterns for darkfield
+*/
 static const uint8_t df_pattern[] = {
     0b00111100,
     0b01111110,
@@ -27,6 +38,9 @@ static const uint8_t df_pattern[] = {
     0b01111110,
     0b00111100
 };
+/*
+ * defines patterns for brightfield
+*/
 static const uint8_t bf_pattern[] = {
     0b00111100,
     0b01111110,
@@ -37,6 +51,9 @@ static const uint8_t bf_pattern[] = {
     0b01111110,
     0b00111100
 };
+/*
+ * defines patterns for qdf
+*/
 static const uint8_t qdf_patterns[] = {
     0b00110000,
     0b01110000,
@@ -71,6 +88,9 @@ static const uint8_t qdf_patterns[] = {
     0b01110000,
     0b00110000,
 };
+/*
+ * defines patterns for dpc bt also used by tb
+*/
 static const uint8_t dpc_patterns_bt[] = {
       
     0b00000000,
@@ -92,6 +112,9 @@ static const uint8_t dpc_patterns_bt[] = {
     0b00000000
 
 };
+/*
+ * defines patterns for dpc lr. also used by rl
+*/
 
 
 static const uint8_t dpc_patterns_lr[] = {
@@ -137,6 +160,7 @@ static const uint8_t dpc_patterns_tb[] = {
 
 */
 microscopy_mode get_mode_from_id(int id) {
+    // returns actual struct based on id
     switch(id) {
         case DF_MODE:
         return df_mode;
@@ -157,26 +181,31 @@ microscopy_mode get_mode_from_id(int id) {
 }
 
 void get_pattern_from_index(int index, uint8_t pattern[8], microscopy_mode* mode) {
+    // is mode and pattern valid?
     if (mode == NULL || pattern == NULL) {
         ESP_LOGE("MODE_REGISTRY", "Invalid mode or pattern buffer");
         return;
     }
-
+    // is index within bounds?
     if (index < 0 || index >= mode->num_patterns) {
         ESP_LOGE("MODE_REGISTRY", "Invalid pattern index: %d", index);
         return;
     }
-
+    //copy that data to the given parameter (pattern)
     memcpy(pattern, mode->matrix_patterns + index * 8, 8);
 }
 
 void store_matrix_patterns(microscopy_mode* mode, const uint8_t* patterns, size_t num_patterns) {
-    size_t total_size = num_patterns * 8 * sizeof(uint8_t);
-    mode->matrix_patterns = heap_caps_malloc(total_size, MALLOC_CAP_SPIRAM);
+    size_t total_size = num_patterns * 8 * sizeof(uint8_t); // required size of buffer for holding patterns in bytes. number of patterns * 8 (1 byte for each row) * bytes per pixel (1)
+    
+    //allocate space for the patterns
+    mode->matrix_patterns = heap_caps_malloc(total_size, MALLOC_CAP_SPIRAM); // Put in PSRAM, no DMA channel
+    //matrix patterns valid?
     if (mode->matrix_patterns == NULL) {
         ESP_LOGE("MODE_REGISTRY", "Failed to allocate memory for matrix patterns");
         return;
     }
+    //copy pattern to matrix pattern stored
     memcpy(mode->matrix_patterns, patterns, total_size);
 }
 
