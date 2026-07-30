@@ -17,15 +17,11 @@
 
 #define BG_IMG_NUM 4
 
-volatile bool calibration_in_progress = false;
-
 microscopy_mode mode;
 
 int current_pattern_index = 0;
 
 void camera_acquisition_task(void *arg) {
-    int64_t last_time = esp_timer_get_time()/1000;
-    int frames = 0;
 
     mode = get_mode_from_id(current_mode);
 
@@ -33,6 +29,7 @@ void camera_acquisition_task(void *arg) {
     int last_sent_pattern_index = -1; // force initial pattern send + flush
 
     while(1) {
+        //detect change in mode
         if(get_mode_from_id(current_mode).label != mode.label) {
             mode = get_mode_from_id(current_mode);
             current_pattern_index = 0;
@@ -40,14 +37,19 @@ void camera_acquisition_task(void *arg) {
 
             set_pool_size(mode.num_patterns);
         }
+        // cap pattern index
         if(current_pattern_index >= mode.num_patterns) {
             current_pattern_index = 0;
         }
 
+        //detect pattern change
         bool pattern_changed = (current_pattern_index != last_sent_pattern_index);
+        //set led array intensity
         led_array_set_intensity(mode.led_brightness_val);
         if (pattern_changed) {
+            // get pattern
             get_pattern_from_index(current_pattern_index, current_pattern, &mode);
+            //set pattern
             led_array_send_matrix(current_pattern);
             vTaskDelay(pdMS_TO_TICKS(mode.exposure_time)); // LED + AEC/AGC settle
 
@@ -78,15 +80,6 @@ void camera_acquisition_task(void *arg) {
             current_pattern_index++;
         }
 
-        int64_t current_time = esp_timer_get_time() / 1000;
-        if(current_time-last_time>=100) {
-            cam_fps = 100.0f/((float) frames);
-
-            last_time = current_time;
-            frames=0;
-        }
-        frames++;
-
         update_ui();
         render_ui();
 
@@ -95,7 +88,6 @@ void camera_acquisition_task(void *arg) {
         camera_return_frame(fb);
     }
 }
-
 esp_err_t init_acquisition_sequencer() {
     esp_err_t ret = ESP_OK;
 
