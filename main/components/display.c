@@ -14,23 +14,24 @@
 #include "components/include/spi_bus_manager.h"
 #include "main/pin_config.h"
 
-#define LCD_SPI_HOST        SPI2_HOST
-#define LCD_SPI_CLOCK_HZ    (40 * 1000 * 1000)   
+#define LCD_SPI_HOST        SPI2_HOST // spi bus used for lcd
+#define LCD_SPI_CLOCK_HZ    (40 * 1000 * 1000)    //spi clock hz for lcd
 
-#define LCD_CMD_BITS        8
-#define LCD_PARAM_BITS      8
-#define LCD_COLOR_BITS      16
-#define LCD_QUEUE_DEPTH     3
+#define LCD_CMD_BITS        8 // bits for commands
+#define LCD_PARAM_BITS      8 // bits for parameters
+#define LCD_COLOR_BITS      16 // number of bits for a color
+#define LCD_QUEUE_DEPTH     3 // size of internal transaction queue
 
+//address for madctl config
 #define ILI9341_CMD_RDMADCTL 0x0B
 
+// lcd panel handle
 esp_lcd_panel_handle_t lcd_panel_handle;
 
 static const char *TAG = "DISPLAY";
 
 esp_lcd_panel_io_handle_t lcd_io_handle = NULL;
 
-//static uint16_t* frame_buffer;
 
 
 uint32_t get_time_millis(void) {
@@ -42,6 +43,7 @@ esp_err_t init_display() {
 
     //frame_buffer = heap_caps_malloc(DISPLAY_WIDTH * DISPLAY_HEIGHT * sizeof(uint16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA);
 
+    //configure GPIOs for the lcd (not those in SPI bus)
     gpio_config_t tcs_cfg = {
     .pin_bit_mask = (1ULL << T_CS_PIN),
     .mode         = GPIO_MODE_OUTPUT,
@@ -62,7 +64,7 @@ gpio_set_level(T_CS_PIN, 1);  // deasserted
         .lcd_param_bits      = LCD_PARAM_BITS,
     };
     
-
+    //initialize io for lcd panel
     ret = esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_SPI_HOST,
                                     &io_config, &lcd_io_handle);
 
@@ -71,26 +73,29 @@ gpio_set_level(T_CS_PIN, 1);  // deasserted
         ESP_LOGE(TAG, "esp_lcd_new_panel_io_spi failed: %s", esp_err_to_name(ret));
         return ret;
     }
+    // config lcd panel
     esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = LCD_RST_PIN,
         .bits_per_pixel = LCD_COLOR_BITS,
-        .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_RGB,
-        .data_endian    = LCD_RGB_DATA_ENDIAN_BIG,
+        .rgb_ele_order  = LCD_RGB_ELEMENT_ORDER_RGB, //rgb color order, although many displays don't actually use this. Fixed with color functions
+        .data_endian    = LCD_RGB_DATA_ENDIAN_BIG, // read most significant bit first
        // .color_space    = ESP_LCD_COLOR_SPACE_BGR,
         //.rgb_endian     = LCD_RGB_DATA_ENDIAN_BIG,
     };
 
+    //initialize lcd panel
     ret = esp_lcd_new_panel_ili9341(lcd_io_handle, &panel_config, &lcd_panel_handle);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "esp_lcd_new_panel_ili9341 failed: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd_panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_init(lcd_panel_handle));
-    ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(lcd_panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(lcd_panel_handle, true));
-    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(lcd_panel_handle, false));
+    //configure panel
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(lcd_panel_handle)); // reset
+    ESP_ERROR_CHECK(esp_lcd_panel_init(lcd_panel_handle)); // initialize
+    ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(lcd_panel_handle, true)); // swap x and y
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(lcd_panel_handle, true)); // turn display on
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(lcd_panel_handle, false)); // dont invert color
     //esp_lcd_panel_swap_xy(lcd_panel_handle, false);
     //esp_lcd_panel_mirror(lcd_panel_handle, true, false);
 
