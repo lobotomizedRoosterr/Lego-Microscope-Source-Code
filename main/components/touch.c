@@ -8,24 +8,24 @@
 #include "esp_log.h"
 
 static const char* TAG = "TOUCH";
-esp_lcd_touch_handle_t tp;
+esp_lcd_touch_handle_t tp; /*handle used to identify the touch controller with the driver*/
 
 esp_err_t init_touch(void) {
     esp_err_t ret = ESP_OK;
 
-    esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-    esp_lcd_panel_io_spi_config_t tp_io_config = ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(T_CS_PIN);
-    tp_io_config.pclk_hz=1000000;
+    esp_lcd_panel_io_handle_t tp_io_handle = NULL; /*handle associated with the io of touch controller*/
+    esp_lcd_panel_io_spi_config_t tp_io_config = ESP_LCD_TOUCH_IO_SPI_XPT2046_CONFIG(T_CS_PIN); /* configuration of the touch controller io */
+    tp_io_config.pclk_hz=1000000; /*frequency of pixel clock*/
 
     // Attach the TOUCH to the SPI bus
     ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &tp_io_config, &tp_io_handle));
 
     esp_lcd_touch_config_t tp_cfg = {
-        .x_max = DISPLAY_HEIGHT,
-        .y_max = DISPLAY_WIDTH,
-        .rst_gpio_num = -1,
-        .int_gpio_num = -1,
-        .flags = {
+        .x_max = DISPLAY_HEIGHT, //maximum possible x read
+        .y_max = DISPLAY_WIDTH, //maximum possible y read
+        .rst_gpio_num = -1, //No reset pin needed
+        .int_gpio_num = -1, //interrupt pin unneeded
+        .flags = { // These flags I configured to work with my specific display.
             .swap_xy = 1,
             .mirror_x = 1,
             .mirror_y = 1,
@@ -47,8 +47,10 @@ touch_data get_touch() {
     uint16_t str[1];
     uint8_t cnt = 0;
 
+    //get touch data from driver (it returns a bool that dictates if the screen is currently being pressed)
     bool pr = esp_lcd_touch_get_coordinates(tp, x, y, str, &cnt, 1);
 
+    //configure return touch_data struct variable
     touch_data ret = (touch_data) {
         .pressed=pr,
         .touch_strength=str[0],
