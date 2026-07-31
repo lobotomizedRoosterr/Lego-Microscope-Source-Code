@@ -64,6 +64,17 @@ esp_err_t init_render_engine() {
 
 
 
+uint16_t rgb565_from_greyscale(uint8_t grey) {
+    uint16_t r = (grey >> 3);
+    uint16_t g = (grey >> 2);
+    uint16_t b = (grey >> 3);
+
+    uint16_t val = (r << 11) | (g << 5) | b;
+
+    uint16_t rgb565 = (val >> 8) | (val << 8);
+
+    return rgb565;
+}
 
 void greyscale_to_rgb565(uint8_t *greyscale, uint16_t *rgb565, int width, int height) {
 
@@ -92,6 +103,24 @@ void greyscale_to_rgb565(uint8_t *greyscale, uint16_t *rgb565, int width, int he
         uint16_t val = (r << 11) | (g << 5) | b;
         //configure rgb565 buffer given
         rgb565[i] = (val >> 8) | (val << 8);
+    }
+}
+
+
+void draw_value_map(float **map, int x, int y, int width, int height) {
+    for(int dx = 0; dx < width; dx++) {
+        for(int dy = 0; dy < height; dy++) {
+            size_t idx = (size_t) dy * width + dx;
+            float val_f = (*map)[idx];
+            //convert to 8 bit integer value
+            uint8_t val = (uint8_t) val_f;
+
+            if(val > 255) val = 255;
+            if(val < 0) val = 0;
+
+            //convert to 16 bit integer
+            draw_pixel(x + dx, y + dy, rgb565_from_greyscale(val));
+        }
     }
 }
 

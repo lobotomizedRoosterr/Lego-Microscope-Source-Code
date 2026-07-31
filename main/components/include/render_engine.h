@@ -8,6 +8,11 @@
 #include "esp_lcd_ili9341.h"
 
 
+enum value_map_visualization {
+    GREYSCALE_VALUE_VISUALIZATION,
+};
+
+
 /*
  * Notes
  * Every draw function's position is not centered. i.e. (x, y) defines a corner of the object. For example, centering a rectangle would see 
@@ -29,6 +34,8 @@ extern uint16_t* frame_buffer;
  * push the frame buffer to the lcd
 */
 void push_frame();
+
+void draw_value_map(float **map, int x, int y, int width, int height);
 
 /*
  * Converts from greyscale 1 byte format to RGB565 2 byte format
