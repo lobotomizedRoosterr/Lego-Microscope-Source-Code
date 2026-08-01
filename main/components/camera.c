@@ -70,8 +70,8 @@ esp_err_t init_camera() {
  
         .pixel_format = PIXFORMAT_GRAYSCALE, // set to greyscale
  
-        .frame_size   = FRAMESIZE_QVGA, // QVGA size (320x240)
-        .jpeg_quality = 12, // Jpeg quality, although output is not in jpeg format (greyscale)
+        .frame_size   = FRAMESIZE_VGA, // use larger size, forces larger allocation by driver
+        .jpeg_quality = 20, // Jpeg quality, although output is not in jpeg format (greyscale)
  
         .fb_count    = 2, // number of frame buffers
         .grab_mode   = CAMERA_GRAB_LATEST, // grab latest capture
