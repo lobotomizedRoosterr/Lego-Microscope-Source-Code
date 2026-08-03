@@ -4,13 +4,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define NUM_MODES 7
+
 #define BF_MODE 0 /*Brightfield mode*/
 #define DF_MODE 1 /*Darkfield mode*/
 #define QDF_MODE 2 /*Quadrant Darkfield mode*/
-#define DPC_LR_MODE 3 /*Differential Phase Contrast (L-R)/(L+R)*/
-#define DPC_RL_MODE 4 /*Differential Phase Contrast (R-L)/(R+L)*/
-#define DPC_TB_MODE 5 /*Differential Phase Contrast (T-B)/(T+B)*/
-#define DPC_BT_MODE 6 /*Differential Phase Contrast (B-T)/(B+T)*/
+#define DPC_GEN_MODE 3
+#define DPC_LR_MODE 4 /*Differential Phase Contrast (L-R)/(L+R)*/
+#define DPC_RL_MODE 5 /*Differential Phase Contrast (R-L)/(R+L)*/
+#define DPC_TB_MODE 6 /*Differential Phase Contrast (T-B)/(T+B)*/
+#define DPC_BT_MODE 7 /*Differential Phase Contrast (B-T)/(B+T)*/
+
 
 /*
  * this defines the current microscopy mode id that is set for the system

@@ -7,6 +7,7 @@
 #define DISPLAY_WIDTH 320 /*Width of display in px*/
 #define DISPLAY_HEIGHT 240 /*height of display in px*/
 
+
 /* handle used to identify the io configuration of the lcd*/
 extern esp_lcd_panel_io_handle_t lcd_io_handle;
 

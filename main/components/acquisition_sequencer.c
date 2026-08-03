@@ -80,11 +80,6 @@ void camera_acquisition_task(void *arg) {
             current_pattern_index++;
         }
 
-        update_ui();
-        render_ui();
-
-        push_frame();
-
         camera_return_frame(fb);
     }
 }

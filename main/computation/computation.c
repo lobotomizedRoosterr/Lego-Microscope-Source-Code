@@ -18,6 +18,7 @@
 #include "components/include/ui.h"
 
 #include "esp_lcd_panel_ops.h"
+#include "freertos/task.h"
 
 #include <math.h>
 #include "esp_dsp.h"
@@ -33,6 +34,8 @@ float c_scale = 0.9f; // Default scaling factor for QDF computation
 
 uint8_t* computation_frame;
 
+SemaphoreHandle_t computation_frame_mutex;
+
 int frames;
 
 /*
@@ -44,6 +47,9 @@ Or something like that
 */
 
 void begin_new_computation(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data) {
+    if (xSemaphoreTake(computation_frame_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
     finished_frame_pool *fp = (finished_frame_pool*) event_data;
     if (fp == NULL || fp->data == NULL) {
         ESP_LOGE(TAG, "begin_new_computation received invalid frame pool");
@@ -79,8 +85,8 @@ void begin_new_computation(void* handler_arg, esp_event_base_t base, int32_t id,
         ESP_LOGE(TAG, "computation_frame is NULL after mode processing, skipping render");
         return;
     }
-    greyscale_to_rgb565(computation_frame, frame_buffer, capture_width, capture_height);
-
+    //draw_greyscale_image(computation_frame, 0, 0, 320, 240);
+    xSemaphoreGive(computation_frame_mutex);
     esp_event_post_to(event_loop_handle, NEW_FRAME_POOL_PROCESSED, NEW_FRAME_POOL_PROCESSED_ID, NULL, 0, 10);
 }
 
@@ -274,6 +280,7 @@ esp_err_t init_computation() {
         return ESP_ERR_NO_MEM;
     }
 
+    computation_frame_mutex=xSemaphoreCreateMutex();
 
     return ret;
 }

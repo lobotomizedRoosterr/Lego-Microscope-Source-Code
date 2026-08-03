@@ -1,5 +1,7 @@
 #include "esp_err.h"
 #include "esp_event.h"
+#include "freertos/freeRTOS.h"
+#include "freertos/semphr.h"
 
 /*initialize computation*/
 esp_err_t init_computation();
@@ -9,6 +11,8 @@ extern uint8_t* computation_frame;
 
 /*C_scale for QDF calculations*/
 extern float c_scale;
+
+extern SemaphoreHandle_t computation_frame_mutex;
 
 /*
  * this is run when the frame pool finished event is called. It handles image processing

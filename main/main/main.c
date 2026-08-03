@@ -114,8 +114,17 @@ void app_main(void) {
     init_standard_component(init_acquisition_sequencer, "acquisition_sequencer");
     init_standard_component(init_computation, "computation");
     init_standard_component(init_event_system, "event system");
-    init_standard_component(init_ui, "ui");
+    //init_standard_component(screen_manager_init, "ui");
     
+    xTaskCreatePinnedToCore(
+        ui_task,
+        "ui_task",
+        4092,
+        NULL,
+        1,
+        NULL,
+        0
+    );
     /* This pins the camera acquisition loop to core1.*/
     xTaskCreatePinnedToCore(
         camera_acquisition_task,

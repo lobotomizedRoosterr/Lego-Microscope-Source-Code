@@ -1,3 +1,6 @@
+#ifndef RENDER_ENGINE_H
+#define RENDER_ENGINE_H
+
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -6,7 +9,24 @@
 #include "freertos/event_groups.h"
 #include "freertos/semphr.h"
 #include "esp_lcd_ili9341.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum font {
+    FONT_8x14,
+    FONT_8x8,
+};
+
+
+typedef struct {
+    uint8_t b : 6;
+    uint8_t g : 6;
+    uint8_t r : 6;
+} rgb666_color_t;
 
 /*
  * Notes
@@ -19,16 +39,7 @@
 /*initialize render engine*/
 esp_err_t init_render_engine();
 
-/*this single buffer contains the data that will be pushed to the display over the spi2 bus
-* whenever push_frame() is called
-*/
-extern uint16_t* frame_buffer;
 
-
-/*
- * push the frame buffer to the lcd
-*/
-void push_frame();
 
 /*
  * Converts from greyscale 1 byte format to RGB565 2 byte format
@@ -37,7 +48,16 @@ void push_frame();
  * @param width width of image
  * @param height height of image
 */
-void greyscale_to_rgb565(uint8_t *greyscale, uint16_t *rgb565, int width, int height);
+void draw_greyscale_image(uint8_t *greyscale, int x, int y, int width, int height);
+
+/*this single buffer contains the data that will be pushed to the display over the spi2 bus
+* whenever push_frame() is called
+*/
+extern uint8_t* frame_buffer;
+/*
+ * push the frame buffer to the lcd
+*/
+void push_frame();
 
 /*
  * this converts 3 8 bit r g and blue integers into a single 16 bit rgb565 It also takes into account specified color order
@@ -45,7 +65,7 @@ void greyscale_to_rgb565(uint8_t *greyscale, uint16_t *rgb565, int width, int he
  * @param g green value 0-255
  * @param b blue value 0-255
 */
-uint16_t color_from_rgb(uint8_t r, uint8_t g, uint8_t b);
+rgb666_color_t color_from_rgb(uint8_t r, uint8_t g, uint8_t b);
 
 /*
  * This sets a specific pixel of the frame buffer to a specific color value.
@@ -53,7 +73,7 @@ uint16_t color_from_rgb(uint8_t r, uint8_t g, uint8_t b);
  * @param y y value to set
  * @param color rgb565 value
 */
-void draw_pixel(int x, int y, uint16_t color);
+void draw_pixel(int x, int y, rgb666_color_t color);
 /*
  * This draws a line between two points. 
  * @param x0 first point x value
@@ -62,7 +82,7 @@ void draw_pixel(int x, int y, uint16_t color);
  * @param y1 secont point y value
  * @param color rgb565 color value
 */
-void draw_line(int x0, int y0, int x1, int y1, uint16_t color);
+void draw_line(int x0, int y0, int x1, int y1, rgb666_color_t color);
 /*
  * This draws images. Note that while img is of 8 bit integers, each pixel is represented by two 8 bit integers, and these integers are combined 
  * during rendering to create a single 16 bit integer. Therefore, images are still rgb565 and 16 bit. This is done because the LVGL tool to convert images into 
@@ -92,7 +112,7 @@ void draw_char(
     int x,
     int y,
     char c,
-    uint16_t color);
+    rgb666_color_t color, int font);
 /*
  * This draws a rectangle. It draws border, to fill one, use fill rect.
  * @param x x value to draw rectangle
@@ -101,7 +121,7 @@ void draw_char(
  * @param h height of rectangle
  * @param color rgb565 color of rectangle
 */
-void draw_rect(int x, int y, int w, int h, uint16_t color);
+void draw_rect(int x, int y, int w, int h, rgb666_color_t color);
 /*
  * This fills a rectangle.
  * @param x x location of rectangle
@@ -110,7 +130,28 @@ void draw_rect(int x, int y, int w, int h, uint16_t color);
  * @param h height of rectangle
  * @param color rgb565 color of rectangle
 */
-void fill_rect(int x, int y, int w, int h, uint16_t color);
+void fill_rect(int x, int y, int w, int h, rgb666_color_t color);
+
+/*
+ * This fills a rectangle.
+ * @param x x location of rectangle
+ * @param y y location of rectangle
+ * @param w width of rectangle
+ * @param h height of rectangle
+ * @param color rgb565 color of rectangle
+*/
+void fill_rect_bounds(int x0, int y0, int x1, int y1, rgb666_color_t color);
+
+/*
+ * This fills a rectangle.
+ * @param x x location of rectangle
+ * @param y y location of rectangle
+ * @param w width of rectangle
+ * @param h height of rectangle
+ * @param color rgb565 color of rectangle
+*/
+void draw_rect_bounds(int x0, int y0, int x1, int y1, rgb666_color_t color);
+
 /*
  * This draws a string of characters. Note that the only font is 8x14. every space is a single pixel. Keep this in mind when designing UIs.
  * @param x x value to draw string
@@ -118,4 +159,6 @@ void fill_rect(int x, int y, int w, int h, uint16_t color);
  * @param str characters to draw
  * @param color rgb565 color to draw string in
 */
-void draw_text(int x, int y, const char *str, uint16_t color);
+void draw_text(int x, int y, const char *str, rgb666_color_t color, int font);
+
+#endif RENDER_ENGINE_H

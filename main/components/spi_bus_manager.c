@@ -25,7 +25,7 @@ esp_err_t init_spi_bus_manager(void) {
         .sclk_io_num     = SPI2_CLK_PIN,
         .quadwp_io_num   = -1, // no write protect
         .quadhd_io_num   = -1, //no hold signal
-        .max_transfer_sz = (DISPLAY_WIDTH * DISPLAY_HEIGHT) * sizeof(uint16_t), //maximum transfer size, set to max for what will be sent to the lcd
+        .max_transfer_sz = (DISPLAY_WIDTH * DISPLAY_HEIGHT) * sizeof(uint32_t), //maximum transfer size, set to max for what will be sent to the lcd
     };
 
     ret = spi_bus_initialize(SPI2_HOST, &spi2_bus_config, SPI_DMA_CH_AUTO); // init spi bus 2 SPI_DMA_CH_AUTO enables DMA, and uses a driver specified DMA channel function

@@ -15,11 +15,11 @@
 #include "main/pin_config.h"
 
 #define LCD_SPI_HOST        SPI2_HOST // spi bus used for lcd
-#define LCD_SPI_CLOCK_HZ    (40 * 1000 * 1000)    //spi clock hz for lcd
+#define LCD_SPI_CLOCK_HZ    (60 * 1000 * 1000)    //spi clock hz for lcd
 
 #define LCD_CMD_BITS        8 // bits for commands
 #define LCD_PARAM_BITS      8 // bits for parameters
-#define LCD_COLOR_BITS      16 // number of bits for a color
+#define LCD_COLOR_BITS      18 // number of bits for a color
 #define LCD_QUEUE_DEPTH     3 // size of internal transaction queue
 
 //address for madctl config

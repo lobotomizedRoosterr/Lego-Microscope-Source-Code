@@ -8,282 +8,314 @@
 #include "components/include/acquisition_sequencer.h"
 #include "esp_log.h"
 #include "computation/include/computation.h"
-#include "images/bug_img.h"
-#include "images/df_img.h"
-#include "images/bf_img.h"
-#include "images/qdf_img.h"
-#include "images/dpc_img.h"
-#include "images/dpc_lr_img.h"
-#include "images/dpc_rl_img.h"
-#include "images/dpc_tb_img.h"
-#include "images/dpc_bt_img.h"
-#include "images/bgc_img.h"
-#include "images/file_img.h"
+#include "freertos/FreeRTOS.h"
+#include "esp_timer.h"
+#include "freertos/semphr.h"
+#include "freertos/task.h"
+#include "components/include/ui.h"
+ 
+#define UI_TASK_PERIOD_MS 33   /* ~30 fps; raise if touch feels laggy, lower if CPU-bound */
+ 
+static screen_manager_t g_screen_manager;
 
-/*
-UI.c
+int selected_screen;
 
-Buttons
-Every Button is stored as a struct.
-Every button has a "mode" identifier. This dictates what to do when the button is selected.
-
-*/
-
-/* this is meant to hold data regarding a buttons situation.*/
-typedef struct {
-    bool was_selected_last_tick; /*If the button was selected last tick*/
-} button_state_t;
-
-
-button_t buttons[50];
-int button_count = 0;
-
-button_state_t button_states[50];
-
-bool was_tap_down = false;
-
-bool debug_mode = false;
-
-void render_button(button_t b) {
-    uint16_t bg_color;
-    uint16_t fg_color;
-    if(b.is_selected) {
-        bg_color=b.bg_color_selected;
-        fg_color=b.fg_color_selected;
-    } else {
-        bg_color=b.bg_color_normal;
-        fg_color=b.fg_color_normal;
+void render_rect_border(rect_t bounds, border_style_t border)
+{
+    if (border.width == 0) {
+        return;
     }
-    fill_rect(b.x, b.y, b.width, b.height, bg_color);
-    if(b.raw_icon != NULL) {
-        draw_image(b.x+b.icon_offset_x, b.y+b.icon_offset_y, b.raw_icon, b.icon_width, b.icon_height);
-    }
-    draw_rect(b.x, b.y, b.width, b.height, fg_color);
-
-    draw_text(b.x+b.label_offset_x, b.y+b.label_offset_y, b.label, fg_color);
-}
-void dpc_mode_button_pressed(button_t* self, void* data) {
-    
-    buttons[DF_BUTTON_ID].is_selected=false;
-    buttons[BF_BUTTON_ID].is_selected=false;
-    buttons[QDF_BUTTON_ID].is_selected=false;
-    buttons[DPC_BUTTON_ID].is_selected=true;
-    switch(current_mode) {
-        case DPC_LR_MODE:
-            set_mode(DPC_RL_MODE);
-            self->raw_icon=dpc_rl_icon_raw;
-            break;
-        case DPC_RL_MODE:
-            set_mode(DPC_TB_MODE);
-            self->raw_icon=dpc_tb_icon_raw;
-            break;
-        case DPC_TB_MODE:
-            set_mode(DPC_BT_MODE);
-            self->raw_icon=dpc_bt_icon_raw;
-            break;
-        default:
-            set_mode(DPC_LR_MODE);
-            self->raw_icon=dpc_lr_icon_raw;
-            break;
+    for (uint8_t i = 0; i < border.width; i++) {
+        draw_rect(bounds.x + i, bounds.y + i,
+                  bounds.w - (2 * i), bounds.h - (2 * i),
+                  border.color);
     }
 }
-void mode_button_pressed(button_t* self, void* data) {
-    switch(self->id) {
-        case DF_BUTTON_ID:
-            set_mode(DF_MODE);
-            buttons[DF_BUTTON_ID].is_selected=true;
-            buttons[BF_BUTTON_ID].is_selected=false;
-            buttons[QDF_BUTTON_ID].is_selected=false;
-            buttons[DPC_BUTTON_ID].is_selected=false;
-            break;
+ 
+bool hit_test_rect(rect_t bounds, int16_t touch_x, int16_t touch_y)
+{
+    return touch_x >= bounds.x &&
+           touch_x <  bounds.x + (int16_t)bounds.w &&
+           touch_y >= bounds.y &&
+           touch_y <  bounds.y + (int16_t)bounds.h;
+}
+ 
+void render_button(const button_t *btn, bool is_selected)
+{
+    color_pair_t colors = is_selected ? btn->colors.selected : btn->colors.normal;
+ 
+    fill_rect(btn->bounds.x, btn->bounds.y, btn->bounds.w, btn->bounds.h,
+               colors.bg);
+ 
+
+    if(btn->icon.raw != NULL) {
+
+
+        uint16_t img_x = 0;
+        uint16_t img_y = 0;
+        switch(btn->icon.h_align) {
+            case H_ALIGNMENT_CENTER:
+                img_x = btn->bounds.x + (btn->bounds.w - btn->icon.w)/2;
+                break;
+            case H_ALIGNMENT_LEFT:
+                img_x = btn->bounds.x;
+                break;
+            case H_ALIGNMENT_RIGHT:
+                img_x = btn->bounds.x + btn->bounds.w-btn->icon.w;
+                break;
+        }
         
-        case BF_BUTTON_ID:
-            set_mode(BF_MODE);
-            buttons[BF_BUTTON_ID].is_selected=true;
-            buttons[DF_BUTTON_ID].is_selected=false;
-            buttons[QDF_BUTTON_ID].is_selected=false;
-            buttons[DPC_BUTTON_ID].is_selected=false;
-            break;
+        switch(btn->icon.v_align) {
+            case V_ALIGNMENT_MIDDLE:
+                img_y = btn->bounds.y + (btn->bounds.h - btn->icon.h)/2;
+                break;
+            case V_ALIGNMENT_TOP:
+                img_y = btn->bounds.y;
+                break;
+            case V_ALIGNMENT_BOTTOM:
+                img_y = btn->bounds.y + btn->bounds.h-btn->icon.h;
+                break;
+        }
+        draw_image(img_x, img_y, btn->icon.raw, btn->icon.w, btn->icon.h);
+    }
+ 
+    render_rect_border(btn->bounds, btn->border);
+    if (btn->label != NULL) {
+        /* Centering left as a simple heuristic: assumes 8px-wide glyphs,
+           swap for real text-width measurement if labels vary a lot. */
+        uint16_t text_w = 0;
+        for (const char *p = btn->label; *p != '\0'; p++) {
+            text_w += 8;
+        }
+
+        int16_t text_x = 0;
+        int16_t text_y = 0;
+        switch(btn->text_style.h_align) {
+            case H_ALIGNMENT_CENTER:
+                text_x = btn->bounds.x + (btn->bounds.w - text_w) / 2;
+                break;
+            case H_ALIGNMENT_LEFT:
+                text_x = btn->bounds.x + btn->border.width;
+                break;
+            case H_ALIGNMENT_RIGHT:
+                text_x = btn->bounds.x+btn->bounds.w-btn->border.width;
+                break;
+        }
+        //TODO : Config minus for bottom to be for each font
+        switch(btn->text_style.v_align) {
+            case V_ALIGNMENT_MIDDLE:
+                text_y = btn->bounds.y + (btn->bounds.h - 14) / 2;
+                break;
+            case V_ALIGNMENT_TOP:
+                text_y = btn->bounds.y+btn->border.width;
+                break;
+            case V_ALIGNMENT_BOTTOM:
+                text_y = btn->bounds.y+btn->bounds.h-btn->border.width-14;
+                break;
+        }
         
-        
-        case QDF_BUTTON_ID:
-            set_mode(QDF_MODE);
-            buttons[QDF_BUTTON_ID].is_selected=true;
-            buttons[DF_BUTTON_ID].is_selected=false;
-            buttons[BF_BUTTON_ID].is_selected=false;
-            buttons[DPC_BUTTON_ID].is_selected=false;
-            break;
-    };
+ 
+        draw_text( text_x, text_y, btn->label,
+                  btn->text_style.color, 0);
+    }
+}
+ 
+bool button_hit_test(const button_t *btn, touch_event_t evt)
+{
+    if (!evt.pressed) {
+        return false;
+    }
+    rect_t area = (btn->hit_area.w != 0 && btn->hit_area.h != 0)
+                      ? btn->hit_area
+                      : btn->bounds;
+    return hit_test_rect(area, evt.x, evt.y);
+}
+ 
+void render_toggle(const toggle_t *tog)
+{
+    color_pair_t colors = tog->value ? tog->colors.selected : tog->colors.normal;
+    fill_rect(tog->bounds.x, tog->bounds.y, tog->bounds.w, tog->bounds.h,
+               colors.bg);
+}
+ 
+void render_slider(const slider_t *sld)
+{
+    /* Track */
+    fill_rect(sld->bounds.x, sld->bounds.y, sld->bounds.w, sld->bounds.h,
+               sld->colors.normal.bg);
+ 
+    /* Fill proportional to value within [min, max] */
+    if (sld->max > sld->min) {
+        int32_t range   = sld->max - sld->min;
+        int32_t clamped = sld->value < sld->min ? sld->min :
+                           (sld->value > sld->max ? sld->max : sld->value);
+        uint16_t fill_w = (uint16_t)(((clamped - sld->min) * sld->bounds.w) / range);
+ 
+        fill_rect(sld->bounds.x, sld->bounds.y, fill_w, sld->bounds.h,
+                   sld->colors.selected.bg);
+    }
+}
+ 
+void render_grid_cell(const grid_cell_t *cell, bool is_selected)
+{
+    /* Thumbnail bitmap itself is drawn by the gallery screen (it owns
+       image_store access); this just draws the selection highlight. */
+    if (is_selected) {
+        border_style_t highlight = {
+            .color = (rgb666_color_t){ .r = 63, .g = 63, .b = 0 },
+            .width = 2,
+        };
+        render_rect_border(cell->bounds, highlight);
+    }
 }
 
-esp_err_t init_ui(void) {
-
-    // Here are the definitions for every UI Button
-    //Note that the touch bounds are larger than needed. This is because many touch displays
-    //are low quality. This should ensure that buttons can be pressed
-    // see ui.h for 
-
-    add_button((button_t) {
-        .bg_color_normal=color_from_rgb(0, 0, 0),
-        .fg_color_normal=color_from_rgb(255, 255, 255),
-        .icon_offset_x=0,
-        .icon_offset_y=0,
-        .height=48,
-        .width=32,
-        .is_selected=true,
-        .label_offset_x=8,
-        .label_offset_y=33,
-        .label="DF",
-        .x=288,
-        .t_x0=258,
-        .t_x1=320,
-        .t_y0=0,
-        .t_y1=48,
-        .y=0,
-        .raw_icon=darkfield_icon_raw,
-        .icon_width=32,
-        .icon_height=32,
-        .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0),
-        .id=DF_BUTTON_ID,
-        .on_select=&mode_button_pressed,
-        .behavior=PUSH_BEHAVIOR
-    });
-    
-    add_button((button_t) {
-        .bg_color_normal=color_from_rgb(0, 0, 0),
-        .fg_color_normal=color_from_rgb(255, 255, 255),
-        .icon_offset_x=0,
-        .icon_offset_y=0,
-        .height=48,
-        .width=32,
-        .is_selected=false,
-        .label_offset_x=8,
-        .label_offset_y=33,
-        .label="BF",
-        .x=288,
-        .t_x0=258,
-        .t_x1=320,
-        .t_y0=48,
-        .t_y1=96,
-        .y=48,
-        .raw_icon=brightfield_icon_raw,
-        .icon_width=32,
-        .icon_height=32,
-        .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0),
-        .id=BF_BUTTON_ID,
-        .on_select=&mode_button_pressed,
-        .behavior=PUSH_BEHAVIOR
-    });
-    
-    add_button((button_t) {
-        .bg_color_normal=color_from_rgb(0, 0, 0),
-        .fg_color_normal=color_from_rgb(255, 255, 255),
-        .icon_offset_x=0,
-        .icon_offset_y=0,
-        .height=48,
-        .width=32,
-        .is_selected=false,
-        .label_offset_x=3,
-        .label_offset_y=33,
-        .label="QDF",
-        .x=288,
-        .y=48*2,
-        .raw_icon=qdf_icon_raw,
-        .icon_width=32,
-        .icon_height=32,
-        .t_x0=258,
-        .t_x1=320,
-        .t_y0=96,
-        .t_y1=144,
-        .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0),
-        .id=QDF_BUTTON_ID,
-        .on_select=&mode_button_pressed,
-        .behavior=PUSH_BEHAVIOR
-    });
-    
-    add_button((button_t) {
-        .bg_color_normal=color_from_rgb(0, 0, 0),
-        .fg_color_normal=color_from_rgb(255, 255, 255),
-        .icon_offset_x=0,
-        .icon_offset_y=0,
-        .height=48,
-        .width=32,
-        .is_selected=false,
-        .label_offset_x=3,
-        .label_offset_y=33,
-        .label="DPC",
-        .x=288,
-        .t_x0=258,
-        .t_x1=320,
-        .y=48*3,
-        .t_y0=48*3,
-        .t_y1=48*4,
-        .raw_icon=dpc_icon_raw,
-        .icon_width=32,
-        .icon_height=32,
-        .bg_color_selected=color_from_rgb(150, 25, 25),
-        .fg_color_selected=color_from_rgb(50, 0, 0),
-        .id=DPC_BUTTON_ID,
-        .on_select=&dpc_mode_button_pressed,
-        .behavior=PUSH_BEHAVIOR
-    });
-    return ESP_OK;
-}
-
-bool is_button_tapped(button_t *button, touch_data td) {
-    bool ret = (button->t_x0 <= td.touch_x && button->t_x1 >= td.touch_x
-                && button->t_y0 <= td.touch_y && button->t_y1 >= td.touch_y
-                && td.pressed) ? true : false;
+esp_err_t screen_manager_init(screen_manager_t *mgr, const screen_t *initial_screen)
+{
+    esp_err_t ret = ESP_OK;
+    mgr->depth = 0;
+    mgr->stack[mgr->depth++] = initial_screen;
+    if (initial_screen->on_enter != NULL) {
+        initial_screen->on_enter();
+    }
     return ret;
 }
-void update_ui(void) {
-    touch_data td = get_touch();
+void ui_navigate_push(const screen_t *screen)    { 
+    screen_push(&g_screen_manager, screen); 
+}
+void ui_navigate_pop(void)                       { 
+    screen_pop(&g_screen_manager); 
+}
+void ui_navigate_replace(const screen_t *screen) { 
+    screen_replace(&g_screen_manager, screen); 
+}
+void screen_push(screen_manager_t *mgr, const screen_t *screen)
+{
+    if (mgr->depth >= SCREEN_STACK_MAX_DEPTH) {
+        return;   /* stack full; drop rather than corrupt memory */
+    }
+ 
+    const screen_t *prev = mgr->stack[mgr->depth - 1];
+    if (prev->on_exit != NULL) {
+        prev->on_exit();
+    }
+ 
+    mgr->stack[mgr->depth++] = screen;
+ 
+    if (screen->on_enter != NULL) {
+        screen->on_enter();
+    }
+}
+ 
+void screen_pop(screen_manager_t *mgr)
+{
+    if (mgr->depth <= 1) {
+        return;   /* never pop the root screen */
+    }
+ 
+    const screen_t *prev = mgr->stack[mgr->depth - 1];
+    if (prev->on_exit != NULL) {
+        prev->on_exit();
+    }
+ 
+    mgr->depth--;
+ 
+    const screen_t *now = mgr->stack[mgr->depth - 1];
+    if (now->on_enter != NULL) {
+        now->on_enter();
+    }
+}
+ 
+void screen_replace(screen_manager_t *mgr, const screen_t *screen)
+{
+    const screen_t *prev = mgr->stack[mgr->depth - 1];
+    if (prev->on_exit != NULL) {
+        prev->on_exit();
+    }
+ 
+    mgr->stack[mgr->depth - 1] = screen;
+ 
+    if (screen->on_enter != NULL) {
+        screen->on_enter();
+    }
+}
+ 
+const screen_t *screen_current(const screen_manager_t *mgr)
+{
+    return mgr->stack[mgr->depth - 1];
+}
+ 
+void screen_manager_render(screen_manager_t *mgr)
+{
+    const screen_t *screen = screen_current(mgr);
+    if (screen->render != NULL) {
+        screen->render();
+    }
+}
+ 
+void screen_manager_handle_touch(screen_manager_t *mgr, touch_event_t evt)
+{
+    const screen_t *screen = screen_current(mgr);
+    if (screen->handle_touch != NULL) {
+        screen->handle_touch(evt);
+    }
+}
+ 
+void screen_manager_tick(screen_manager_t *mgr)
+{
+    const screen_t *screen = screen_current(mgr);
+    if (screen->handle_tick != NULL) {
+        screen->handle_tick();
+    }
+}
 
-    //this becomes true if even one button has been activated. It disallows buttons declared exclusive from activating.
-    bool has_button_activated = false;
-    for(int i = 0; i < button_count; i++) {
-        button_t *b = &buttons[i];
-        button_state_t *s = &button_states[i];
+ 
+/* ============================================================
+ * ui_task
+ *
+ * Owns the screen manager and drives touch -> tick -> render ->
+ * push_frame each loop iteration. Runs on its own core, separate
+ * from image acquisition, so no acquisition-side locking is
+ * needed here beyond whatever frame_pool/image_store already do
+ * internally.
+ * ============================================================ */
 
-        // if button is not tapped, do not update; continue
-        if(!is_button_tapped(b, td)) {
-            s->was_selected_last_tick=false;
-            continue;
+
+ 
+void ui_task(void *arg)
+{
+    (void)arg;
+ 
+    screen_manager_init(&g_screen_manager, &live_view_screen);
+    screen_manager_init(&g_screen_manager, &mode_debug_screen);
+    screen_manager_init(&g_screen_manager, &settings_screen);
+    screen_manager_init(&g_screen_manager, &gallery_screen);
+    screen_manager_init(&g_screen_manager, &directory_screen);
+
+    ui_navigate_replace(&directory_screen);
+    ui_navigate_push(&live_view_screen);
+    
+    TickType_t last_wake = xTaskGetTickCount();
+    bool last_tick_pressed = false;
+ 
+    for (;;) {
+        touch_data td = get_touch();
+        touch_event_t evt = {
+            .x = td.touch_x,
+            .y = td.touch_y,
+            .pressed = td.pressed,
+            .pressed_last_tick=last_tick_pressed
         };
+        last_tick_pressed=evt.pressed;
+ 
+        if (evt.pressed) {
+            screen_manager_handle_touch(&g_screen_manager, evt);
+        }
+ 
+        screen_manager_tick(&g_screen_manager);
+        screen_manager_render(&g_screen_manager);
+        push_frame();
 
-        // if button is push behavior, and was selected last tick, continue
-        if(b->behavior == PUSH_BEHAVIOR && s->was_selected_last_tick) continue;
-
-        //if button is exclusive and another button has been activated, do not update; continue
-        if(b->is_exclusive == true && has_button_activated) continue;
-
-        // if not continued, button is being interacted with properly
-        s->was_selected_last_tick=true;
-        has_button_activated=true;
-        b->on_select(b, NULL);
+ 
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(UI_TASK_PERIOD_MS));
     }
-
-    //was_tap_down makes sure that the user has to release their finger before another button register can happen.
-}
-
-void add_button(button_t b) {
-    buttons[b.id] = b;
-    button_count++;
-    button_states[b.id] = (button_state_t) {
-        .was_selected_last_tick=false,
-    };
-}
-
-void render_ui(void) {
-    //render every button
-    for(int i = 0; i < button_count; i++) {
-        render_button(buttons[i]);
-    }
-    //render the top bar that displays mode
-    fill_rect(0, 0, 288, 16, color_from_rgb(0, 0, 0));
-    draw_text(1, 1, get_mode_from_id(current_mode).label, color_from_rgb(0, 255, 0));
-
 }
