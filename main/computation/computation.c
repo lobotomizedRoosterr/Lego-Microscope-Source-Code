@@ -92,13 +92,13 @@ void begin_new_computation(void* handler_arg, esp_event_base_t base, int32_t id,
 
 void run_bf(uint8_t** data, uint8_t** buf) {
     const uint8_t* img = *data;
-
     for(int x = 0; x < capture_width; x++) {
         for(int y = 0; y < capture_height; y++) {
             size_t idx = (size_t)y * capture_width + x;
-            int val = img[idx];
+            float val_f = (float) img[idx] / (255.0f/63.0f);
+            int val = (int) val_f;
             if(val < 0) val = 0;
-            if(val > 255) val = 255;
+            if(val > 63) val = 63;
 
             (*buf)[idx] = (uint8_t)val;
         }
@@ -108,12 +108,14 @@ void run_bf(uint8_t** data, uint8_t** buf) {
 void run_df(uint8_t** data, uint8_t** buf) {
     const uint8_t* img = *data;
 
+
     for(int x = 0; x < capture_width; x++) {
         for(int y = 0; y < capture_height; y++) {
             size_t idx = (size_t)y * capture_width + x;
-            int val = img[idx];
+            float val_f = (float) img[idx] / (255.0f/63.0f);
+            int val = (int) val_f;
             if(val < 0) val = 0;
-            if(val > 255) val = 255;
+            if(val > 63) val = 63;
 
             (*buf)[idx] = (uint8_t)val;
         }
@@ -139,10 +141,10 @@ void run_qdf(uint8_t** data, uint8_t** buf, float c_scale) {
 
             size_t idx = (size_t)y * capture_width + x;
 
-            float tl = (float) tl_img[idx];
-            float tr = (float) tr_img[idx];
-            float br = (float) br_img[idx];
-            float bl = (float) bl_img[idx];
+            float tl = (float) tl_img[idx]/(255.0f/63.0f);
+            float tr = (float) tr_img[idx]/(255.0f/63.0f);
+            float br = (float) br_img[idx]/(255.0f/63.0f);
+            float bl = (float) bl_img[idx]/(255.0f/63.0f);
 
             // --- Compute edge image (Eq. 1) ---
             float E = fabsf(tl - br) + fabsf(bl - tr);
@@ -158,6 +160,7 @@ void run_qdf(uint8_t** data, uint8_t** buf, float c_scale) {
             if (qdf_val > 255) qdf_val = 255;
 
             qdf_image[idx] = (uint8_t)qdf_val;
+
         }
     }
     memcpy(*buf, qdf_image, frame_size);
@@ -179,13 +182,14 @@ void run_dpc_lr(uint8_t** data, uint8_t** buf) {
             // add small number to denominator to prevent divide by zero errors
             float den = (l + r) + 0.0001f;
             // DPC values range between -1 and 1. To change to 0-255, I added 1, divided by 2 and multiplied by 255.
-            float val_f = ((num/den) + 1.0f) / 2.0f * 255.0f;
+            float val_f = ((num/den) + 1.0f)/2*63.0f;
             int val = (int) val_f;
 
-            if(val < 0) val = 0;
-            if(val > 255) val = 255;
 
-            (*buf)[idx] = (uint8_t)val;
+            if(val > 63) val  = 63;
+            if(val < 0) val = 0;
+
+            (*buf)[idx] = (uint8_t) val;
         }
     }
 }
@@ -197,14 +201,14 @@ void run_dpc_rl(uint8_t** data, uint8_t** buf) {
     for(int x = 0; x < capture_width; x++) {
         for(int y = 0; y < capture_height; y++) {
             size_t idx = (size_t)y * capture_width + x;
-            float l = (float) l_img[idx];
-            float r = (float) r_img[idx];
+            float l = (float) l_img[idx]/(255.0f/63.0f);
+            float r = (float) r_img[idx]/(255.0f/63.0f);
 
             float num = r - l;
             // add small number to denominator to prevent divide by zero errors
             float den = (r + l) + 0.0001f;
             // DPC values range between -1 and 1. To change to 0-255, I added 1, divided by 2 and multiplied by 255.
-            float val_f = ((num/den) + 1.0f) / 2.0f * 255.0f;
+            float val_f = ((num/den) + 1.0f) / 2.0f * 63.0f;
             int val = (int) val_f;
             if(val < 0) val = 0;
             if(val > 255) val = 255;
@@ -230,7 +234,7 @@ void run_dpc_tb(uint8_t** data, uint8_t** buf) {
             // add small number to denominator to prevent divide by zero errors
             float den = (t + b) + 0.0001f;
             // DPC values range between -1 and 1. To change to 0-255, I added 1, divided by 2 and multiplied by 255.
-            float val_f = ((num/den) + 1.0f) / 2.0f * 255.0f;
+            float val_f = ((num/den) + 1.0f) / 2.0f * 63.0f;
             int val = (int) val_f;
 
             if(val < 0) val = 0;
@@ -255,7 +259,7 @@ void run_dpc_bt(uint8_t** data, uint8_t** buf) {
             // add small number to denominator to prevent divide by zero errors
             float den = (b + t) + 0.0001f;
             // DPC values range between -1 and 1. To change to 0-255, I added 1, divided by 2 and multiplied by 255.
-            float val_f = ((num/den) + 1.0f) / 2.0f * 255.0f;
+            float val_f = ((num/den) + 1.0f) / 2.0f * 63.0f;
             int val = (int) val_f;
 
             if(val < 0) val = 0;

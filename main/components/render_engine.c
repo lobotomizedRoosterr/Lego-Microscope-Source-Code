@@ -75,9 +75,7 @@ void draw_greyscale_image(uint8_t *greyscale, int x, int y, int width, int heigh
         for(int dst_y = 0; dst_y < height; dst_y++) {
             size_t grey_idx = (size_t) dst_y*width+dst_x;
 
-            uint8_t grey = greyscale[grey_idx]/(255/63);
-
-            uint8_t grey6 = grey << 2;
+            uint8_t grey6 = greyscale[grey_idx];
 
             if(grey6 > 63) grey6=63;
 
