@@ -5,6 +5,8 @@
 #include "components/include/frame_pool.h"
 #include "computation/include/computation.h"
 #include "esp_camera.h"
+#include "esp_spiffs.h"
+#include <stdio.h>
 
 //these are holders for microscopy mode parameters (patterns, exposure, gain, etc)
 
@@ -20,10 +22,13 @@ int current_mode = BF_MODE; // sets it to default mode
 
 // TODO: reuse TB for TB and BT, same for LR, RL (DPC)
 
-/*
- * Note that for each pattern, it is simply 8 8-bit integers. Each bit represents whether an LED should be lit up.
- * This results in 64 bits, one for each LED
-*/
+/* ---- SPIFFS-backed camera config storage ---- */
+/* Reuses the "storage" partition/mount point that image_store already
+ * registers; adjust these if your project uses a different label. */
+static const char* CFG_PARTITION_LABEL = "storage";
+static const char* CFG_MOUNT_POINT = "/storage";
+static const char* CFG_FILE_PATH = "/storage/mode_cfg.bin";
+static const char* CFG_TAG = "MODE_CONFIG";
 
 /*
  * defines patterns for darkfield
@@ -137,47 +142,41 @@ static const uint8_t dpc_patterns_lr[] = {
     0b00001110,
     0b00001100,
 };
+
 /*
-static const uint8_t dpc_patterns_tb[] = {
-    0b00111100,
-    0b01111110,
-    0b11111111,
-    0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b00000000,
-    0b11111111,
-    0b11111111,
-    0b01111110,
-    0b00111100
-};
-
+ * Returns a POINTER to the actual static mode struct for a given id
+ * (unlike get_mode_from_id(), which returns a copy). Internal use only —
+ * needed so mode_config_* functions can mutate the live struct in place.
 */
-microscopy_mode get_mode_from_id(int id) {
-    // returns actual struct based on id
-    switch(id) {
+static microscopy_mode* get_mode_ptr_from_id(int id) {
+    switch (id) {
         case DF_MODE:
-        return df_mode;
+        return &df_mode;
         case BF_MODE:
-        return bf_mode;
+        return &bf_mode;
         case QDF_MODE:
-        return qdf_mode;
+        return &qdf_mode;
         case DPC_LR_MODE:
-        return dpc_mode_lr;
+        return &dpc_mode_lr;
         case DPC_RL_MODE:
-        return dpc_mode_rl;
+        return &dpc_mode_rl;
         case DPC_TB_MODE:
-        return dpc_mode_tb;
+        return &dpc_mode_tb;
         case DPC_BT_MODE:
-        return dpc_mode_bt;
+        return &dpc_mode_bt;
     }
-    return df_mode;
+    // No backing struct for this id (e.g. DPC_GEN_MODE) — callers that
+    // iterate 0..NUM_MODES-1 must skip ids like this via has_mode_struct().
+    ESP_LOGE("MODE_REGISTRY", "get_mode_ptr_from_id: no struct for id %d", id);
+    return &df_mode;
+}
+
+static bool has_mode_struct(int id) {
+    return id != DPC_GEN_MODE;
+}
+
+microscopy_mode get_mode_from_id(int id) {
+    return *get_mode_ptr_from_id(id);
 }
 
 void get_pattern_from_index(int index, uint8_t pattern[8], microscopy_mode* mode) {
@@ -221,6 +220,207 @@ void set_mode(int mode) {
         s->set_aec_value(s, m.exposure_val);
         s->set_sharpness(s, m.sharpness_val);
     }
+}
+
+/* ---- SPIFFS-backed camera config storage ---- */
+
+static esp_err_t ensure_spiffs_mounted(void) {
+    if (esp_spiffs_mounted(CFG_PARTITION_LABEL)) {
+        return ESP_OK;
+    }
+
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = CFG_MOUNT_POINT,
+        .partition_label = CFG_PARTITION_LABEL,
+        .max_files = 4,
+        .format_if_mount_failed = true
+    };
+
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(CFG_TAG, "Failed to mount SPIFFS partition '%s': %s",
+                 CFG_PARTITION_LABEL, esp_err_to_name(ret));
+        return ret;
+    }
+
+    size_t total = 0, used = 0;
+    ret = esp_spiffs_info(CFG_PARTITION_LABEL, &total, &used);
+    if (ret == ESP_OK) {
+        ESP_LOGI(CFG_TAG, "SPIFFS mounted: %d/%d bytes used", used, total);
+    }
+    return ESP_OK;
+}
+
+static void config_from_mode(const microscopy_mode* mode, microscopy_config* cfg) {
+    cfg->exposure_val = mode->exposure_val;
+    cfg->gain_val = mode->gain_val;
+    cfg->exposure_time = mode->exposure_time;
+    cfg->sharpness_val = mode->sharpness_val;
+    cfg->led_brightness_val = mode->led_brightness_val;
+}
+
+static void apply_config_to_mode(microscopy_mode* mode, const microscopy_config* cfg) {
+    mode->exposure_val = cfg->exposure_val;
+    mode->gain_val = cfg->gain_val;
+    mode->exposure_time = cfg->exposure_time;
+    mode->sharpness_val = cfg->sharpness_val;
+    mode->led_brightness_val = cfg->led_brightness_val;
+}
+esp_err_t mode_config_save_all(void) {
+    esp_err_t ret = ensure_spiffs_mounted();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    FILE* f = fopen(CFG_FILE_PATH, "wb");
+    if (f == NULL) {
+        ESP_LOGE(CFG_TAG, "Failed to open '%s' for writing", CFG_FILE_PATH);
+        return ESP_FAIL;
+    }
+
+    for (int id = 0; id < NUM_MODES; id++) {
+        microscopy_config cfg = {0};
+        if (has_mode_struct(id)) {
+            config_from_mode(get_mode_ptr_from_id(id), &cfg);
+        }
+        // unmapped ids (DPC_GEN_MODE) still get a placeholder record
+        // written so every slot's file offset stays fixed
+        if (fwrite(&cfg, sizeof(microscopy_config), 1, f) != 1) {
+            ESP_LOGE(CFG_TAG, "Failed writing config for mode %d", id);
+            fclose(f);
+            return ESP_FAIL;
+        }
+    }
+
+    fclose(f);
+    ESP_LOGI(CFG_TAG, "Saved config for all %d modes to flash", NUM_MODES);
+    return ESP_OK;
+}
+
+esp_err_t mode_config_get(int mode_id, microscopy_config* out_cfg) {
+    if (out_cfg == NULL || mode_id < 0 || mode_id >= NUM_MODES) {
+        ESP_LOGE(CFG_TAG, "Invalid arguments to mode_config_get (mode_id=%d)", mode_id);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ensure_spiffs_mounted();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    FILE* f = fopen(CFG_FILE_PATH, "rb");
+    if (f == NULL) {
+        ESP_LOGE(CFG_TAG, "Config file '%s' not found — call mode_config_init() first", CFG_FILE_PATH);
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    if (fseek(f, mode_id * sizeof(microscopy_config), SEEK_SET) != 0) {
+        fclose(f);
+        return ESP_FAIL;
+    }
+
+    size_t read = fread(out_cfg, sizeof(microscopy_config), 1, f);
+    fclose(f);
+
+    if (read != 1) {
+        ESP_LOGE(CFG_TAG, "Failed reading config for mode %d", mode_id);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
+}
+
+esp_err_t mode_config_set(int mode_id, const microscopy_config* cfg) {
+    if (cfg == NULL || mode_id < 0 || mode_id >= NUM_MODES) {
+        ESP_LOGE(CFG_TAG, "Invalid arguments to mode_config_set (mode_id=%d)", mode_id);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t ret = ensure_spiffs_mounted();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    // update in-memory struct first
+    microscopy_mode* mode = get_mode_ptr_from_id(mode_id);
+    apply_config_to_mode(mode, cfg);
+
+    // then persist just this mode's record
+    FILE* f = fopen(CFG_FILE_PATH, "r+b");
+    if (f == NULL) {
+        // file may not exist yet — fall back to writing out everything
+        return mode_config_save_all();
+    }
+
+    if (fseek(f, mode_id * sizeof(microscopy_config), SEEK_SET) != 0) {
+        fclose(f);
+        return ESP_FAIL;
+    }
+
+    size_t written = fwrite(cfg, sizeof(microscopy_config), 1, f);
+    fclose(f);
+
+    if (written != 1) {
+        ESP_LOGE(CFG_TAG, "Failed persisting config for mode %d", mode_id);
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(CFG_TAG, "Updated and persisted config for mode %d", mode_id);
+
+    // if this is the live mode, re-apply the new values to the sensor now
+    if (mode_id == current_mode) {
+        sensor_t *s = esp_camera_sensor_get();
+        if (s != NULL) {
+            s->set_agc_gain(s, mode->gain_val);
+            s->set_aec_value(s, mode->exposure_val);
+            s->set_sharpness(s, mode->sharpness_val);
+        }
+    }
+
+    return ESP_OK;
+}
+
+esp_err_t mode_config_reset_defaults(void) {
+    esp_err_t ret = ensure_spiffs_mounted();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    if (remove(CFG_FILE_PATH) != 0) {
+        ESP_LOGW(CFG_TAG, "No existing config file to remove (or removal failed)");
+    }
+    return ESP_OK;
+}
+
+esp_err_t mode_config_init(void) {
+    esp_err_t ret = ensure_spiffs_mounted();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    FILE* f = fopen(CFG_FILE_PATH, "rb");
+    if (f == NULL) {
+        // first boot / fresh flash — seed the file from current in-memory defaults
+        ESP_LOGI(CFG_TAG, "No config file found, seeding defaults");
+        return mode_config_save_all();
+    }
+
+    for (int id = 0; id < NUM_MODES; id++) {
+        microscopy_config cfg;
+        if (fread(&cfg, sizeof(microscopy_config), 1, f) != 1) {
+            ESP_LOGW(CFG_TAG, "Config file too short at mode %d, keeping hardcoded default and re-saving", id);
+            fclose(f);
+            return mode_config_save_all();
+        }
+        if (has_mode_struct(id)) {
+            apply_config_to_mode(get_mode_ptr_from_id(id), &cfg);
+        }
+        // ids without a struct (DPC_GEN_MODE) are read to advance the
+        // file cursor correctly, then discarded
+    }
+
+    fclose(f);
+    ESP_LOGI(CFG_TAG, "Loaded config for all %d modes from flash", NUM_MODES);
+    return ESP_OK;
 }
 
 esp_err_t init_mode_registry() {
@@ -270,7 +470,9 @@ esp_err_t init_mode_registry() {
     store_matrix_patterns(&dpc_mode_bt, dpc_patterns_bt, 2);
 
 
-    //set exposure, exposure times, gain, etc.
+    //set exposure, exposure times, gain, etc. — these are the HARDCODED
+    //DEFAULTS. mode_config_init() below will overwrite them with
+    //flash-persisted values if a config file already exists.
     df_mode.exposure_time=20;
     df_mode.exposure_val=75;
     df_mode.gain_val=1;
@@ -318,6 +520,14 @@ esp_err_t init_mode_registry() {
     dpc_mode_bt.sharpness_val=-2;
     dpc_mode_bt.led_brightness_val=15;
 
+    // load persisted config from flash (or seed flash with the defaults
+    // above, on first boot) — must run after hardcoded defaults, before
+    // set_mode() applies values to the sensor
+    ret = mode_config_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW("MODE_REGISTRY", "mode_config_init failed (%s), continuing with hardcoded defaults", esp_err_to_name(ret));
+        ret = ESP_OK; // non-fatal — hardcoded values are still valid
+    }
 
     led_array_send_matrix(df_pattern);
 

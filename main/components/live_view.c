@@ -14,6 +14,8 @@
 
 #include "resources/images/exit_img.h"
 
+#include "resources/images/flop_img.h"
+
  
 static button_t mode_buttons[4];
  
@@ -272,6 +274,13 @@ static void build_capture_button(void) {
             .color = { .r = 63, .g = 63, .b = 63 },
             .h_align=H_ALIGNMENT_CENTER,
             .v_align=V_ALIGNMENT_BOTTOM
+        },
+        .icon = {
+            .raw = &flop_icon_raw,
+            .w=32,
+            .h=32,
+            .h_align=H_ALIGNMENT_CENTER,
+            .v_align=V_ALIGNMENT_TOP,
         },
         .label = "CAP",
         .on_press = on_capture_press,

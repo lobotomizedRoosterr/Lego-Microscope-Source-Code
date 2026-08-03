@@ -1,5 +1,6 @@
 #include "components/include/ui.h"
 #include "components/include/render_engine.h"
+#include "resources/images/exit_img.h"
 
 static button_t exit_button;
 
@@ -42,6 +43,13 @@ static void debug_on_enter(void) {
             .color = { .r = 63, .g = 63, .b = 63 },
             .h_align=H_ALIGNMENT_CENTER,
             .v_align=V_ALIGNMENT_BOTTOM
+        },
+        .icon = {
+            .raw = &exit_icon_raw,
+            .w=32,
+            .h=32,
+            .h_align=H_ALIGNMENT_CENTER,
+            .v_align=V_ALIGNMENT_TOP,
         },
         .label = "EXT",
         .on_press = on_exit_press,
