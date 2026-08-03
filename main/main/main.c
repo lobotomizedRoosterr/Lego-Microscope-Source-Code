@@ -21,6 +21,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include "components/include/image_store.h"
+
 static const char* TAG = "MAIN"; 
 
 esp_event_loop_handle_t event_loop_handle;
@@ -114,6 +116,7 @@ void app_main(void) {
     init_standard_component(init_acquisition_sequencer, "acquisition_sequencer");
     init_standard_component(init_computation, "computation");
     init_standard_component(init_event_system, "event system");
+    init_standard_component(image_store_init, "image storage");
     //init_standard_component(screen_manager_init, "ui");
     
     xTaskCreatePinnedToCore(

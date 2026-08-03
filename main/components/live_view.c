@@ -1,6 +1,8 @@
 #include "components/include/ui.h"
 #include "components/include/mode_registry.h"
 #include "components/include/render_engine.h"
+#include "components/include/image_store.h"
+
 #include "computation/include/computation.h"
 
 #include "resources/images/bf_img.h"
@@ -54,6 +56,23 @@ static void on_mode_press(void *ctx)
 }
 
 static void on_capture_press(void *ctx) {
+    (void) ctx;
+
+    fill_rect_bounds(0,0,320,240,(rgb666_color_t){12,12,12});
+    draw_text(106,113,"Saving Image", (rgb666_color_t){63,63,63}, 0);
+    push_frame();
+
+    uint32_t ind = 0;
+
+    xSemaphoreTake(computation_frame_mutex, portMAX_DELAY);
+    esp_err_t err = image_store_save((void*) computation_frame, 320, 240, IMAGE_FORMAT_U8_GRAY, current_mode, &ind);
+    xSemaphoreGive(computation_frame_mutex);
+
+    if(err != ESP_OK) {
+        ESP_LOGI("Capture", "Failed to capture image");
+        return;
+    }
+    ESP_LOGI("Capture", "Saved image at index %d", (int) ind);
 }
 
 static void on_exit_press(void *ctx) {
