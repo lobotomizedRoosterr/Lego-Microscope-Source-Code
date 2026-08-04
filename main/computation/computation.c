@@ -155,9 +155,9 @@ void run_qdf(uint8_t** data, uint8_t** buf, float c_scale) {
             // --- Compute QDF (Eq. 2) ---
             float qdf_val = (c_scale * DF - E);
 
-            // Clamp to 0-255
+            // Clamp to 0-63
             if (qdf_val < 0) qdf_val = 0;
-            if (qdf_val > 255) qdf_val = 255;
+            if (qdf_val > 63) qdf_val = 63;
 
             qdf_image[idx] = (uint8_t)qdf_val;
 
@@ -211,7 +211,7 @@ void run_dpc_rl(uint8_t** data, uint8_t** buf) {
             float val_f = ((num/den) + 1.0f) / 2.0f * 63.0f;
             int val = (int) val_f;
             if(val < 0) val = 0;
-            if(val > 255) val = 255;
+            if(val > 63) val = 63;
 
             (*buf)[idx] = (uint8_t)val;
         }
@@ -226,8 +226,8 @@ void run_dpc_tb(uint8_t** data, uint8_t** buf) {
     for(int x = 0; x < capture_width; x++) {
         for(int y = 0; y < capture_height; y++) {
             size_t idx = (size_t)y * capture_width + x;
-            float b = (float) b_img[idx];
-            float t = (float) t_img[idx];
+            float b = (float) b_img[idx]/(255.0f/63.0f);;
+            float t = (float) t_img[idx]/(255.0f/63.0f);;
 
             float num = t - b;
             
@@ -238,9 +238,9 @@ void run_dpc_tb(uint8_t** data, uint8_t** buf) {
             int val = (int) val_f;
 
             if(val < 0) val = 0;
-            if(val > 255) val = 255;
+            if(val > 63) val = 63;
 
-            (*buf)[idx] = (uint8_t)val;
+            (*buf)[idx] = (uint8_t)val_f;
         }
     }
 }
@@ -252,8 +252,8 @@ void run_dpc_bt(uint8_t** data, uint8_t** buf) {
     for(int x = 0; x < capture_width; x++) {
         for(int y = 0; y < capture_height; y++) {
             size_t idx = (size_t)y * capture_width + x;
-            float b = (float) b_img[idx];
-            float t = (float) t_img[idx];
+            float b = (float) b_img[idx]/(255.0f/63.0f);;
+            float t = (float) t_img[idx]/(255.0f/63.0f);;
 
             float num = b - t;
             // add small number to denominator to prevent divide by zero errors
@@ -263,7 +263,7 @@ void run_dpc_bt(uint8_t** data, uint8_t** buf) {
             int val = (int) val_f;
 
             if(val < 0) val = 0;
-            if(val > 255) val = 255;
+            if(val > 63) val = 63;
 
             (*buf)[idx] = (uint8_t)val;
         }
